@@ -1,0 +1,299 @@
+---
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: true
+fontsize: 12pt
+geometry: a4paper
+---
+\newpage
+\thispagestyle{empty}
+
+\begin{center}
+    \vspace*{2cm} % Add vertical space to center the content
+
+    {\Huge \textbf{Instagram Reach Analysis}} \\[0.5cm]
+    {\Large Predictive and Inferential Insights} \\[2cm]
+
+    \textbf{\Large Ogechikanma Chelsea Anosike} \\[0.5cm]
+    Master of Science in Data Analytics \\[2cm]
+
+    \textbf{Binghamton University} \\[0.5cm]
+    \textit{December 14, 2024}
+\end{center}
+
+\newpage
+
+# OBJECTIVE
+The objective of this project is to analyze Instagram reach data to determine factors that significantly influence the number of impressions a post receives. The analysis aims to build a predictive model for impressions and provide insights for content optimization strategies.
+
+#SIGNIFICANCE
+Optimizing content strategies can directly impact brand visibility, audience retention, and conversion rates. Insights from this analysis enable informed decision-making for targeted marketing and improved ROI on social media campaigns.
+
+# DATA DESCRIPTION
+The dataset consists of Instagram post performance metrics collected over a defined period, including:
+
+- Response Variable: Impressions (total views).
+- Predictors: Engagement metrics (likes, shares, saves), Comments and profile visits
+
+## PREPROCESSING STEPS
+Standardized column names for clarity (e.g., "From.Home" → "Home").
+Verified and handled missing data (none identified).
+Created an Engagement Score composite metric to consolidate multiple engagement variables.
+
+# METHODOLOGY
+## PREDICTIVE MODELING APPROACH
+A multiple linear regression model was selected due to its interpretability and ability to quantify the contribution of each predictor.
+
+### Model Design
+- Response Variable: Impressions.
+- Predictors: Engagement Score and Profile Visits.
+- Rationale: Engagement metrics are strong indicators of user interest, while profile visits reflect broader reach dynamics.
+
+## EVALUATION METRICS
+- Adjusted R²: Measures explained variance while accounting for model complexity.
+- Coefficient significance: Assessed via p-values (<0.05 deemed significant).
+- Residual diagnostics: Ensures model assumptions are met.
+
+# STEPS AND ANALYSIS
+
+## STEP 1: LOAD THE DATASET
+The dataset was loaded into R using the read.csv() function. Initial checks on structure and data types were conducted to understand the dataset's composition
+```{r}
+data <- read.csv("~/Downloads/instagram_data.csv")
+head(data)
+```
+## DATA CLEANING
+
+```{r}
+colnames(data) <- gsub("From\\.", "", colnames(data))
+
+# Verify the column names
+colnames(data)
+head(data)
+colSums(is.na(data))
+```
+## STEP 2: EXPLORATORY DATA ANALYSIS 
+```{r}
+response <- "Impressions"
+predictors <- c("Saves","Likes","Comments","Shares","Profile.Visits")
+```
+
+### DATA VISUALIZATION/CLEANING
+Scatterplots and correlation matrices were used to explore relationships between the response variable (Impressions) and predictors.
+```{r}
+#Scatterplot and Correlation Matrix
+pairs(data[, predictors])
+cor(data[, predictors])
+
+#Response variable histogram
+hist(data$Impressions, main = "Impressions", xlab = "Impressions")
+```
+
+#### Key Findings:
+- Strong positive correlations were observed between Likes, Shares, and Impressions.
+- Comments and Profile Visits also showed moderate correlations with Impressions.
+- The distribution of Impressions is slightly right-skewed
+
+## STEP 3: REGRESSION MODELING
+
+### CREATING COMPOSITE METRIC
+```{r}
+# Normalize the variables 
+data$Saves_scaled <- scale(data$Saves)
+data$Likes_scaled <- scale(data$Likes)
+data$Shares_scaled <- scale(data$Shares)
+
+# Create the Engagement Score 
+data$Engagement_Score <- data$Saves_scaled + data$Likes_scaled + data$Shares_scaled
+
+```
+
+### FIT MULTIPLE REGRESSION MODEL
+```{r}
+model <- lm(Impressions ~ Engagement_Score + Comments + Profile.Visits, data = data)
+summary(model)
+
+```
+#### Coefficients
+- Intercept:$Estimate = 5190.497$. This represents the expected Impressions when all predictors (Engagement_Score, Comments, Profile.Visits) are 0.
+- Engagement_Score:$Estimate = 1017.645$. For every 1-unit increase in Engagement_Score, Impressions increase by approximately 1018, holding other predictors constant.
+Highly significant(p<2e−16).
+- Comments:$Estimate = -139.260$. For every 1 additional comment, Impressions decrease by approximately 139, holding other predictors constant. This negative relationship is counterintuitive and I will have to investigate further
+- Profile.Visits:$Estimate = 28.476$. For every 1 additional profile visit, Impressions increase by approximately 28.5, holding other predictors constant.
+Highly significant (p<2e−16).
+
+#### Model Diagnostics
+- Residuals:Residuals are the differences between observed and predicted Impressions. The summary shows a range from -4935.3 to 6769.0, indicating variability in prediction errors.
+- Significance: All predictors are statistically significant (p<0.01), meaning they contribute meaningfully to explaining "Impressions".
+- Goodness of Fit:
+*R-squared = 0.8681: Approximately 86.81% of the variability in Impressions is explained by the predictors.
+*Adjusted R-squared = 0.8647: Adjusts for the number of predictors, still very high, indicating a good fit.
+*F-statistic = 252.3 (p < 2.2e-16):
+
+### MODEL WITHOUT COMMENTS VARIABLE
+```{r}
+model_no_comments <- lm(Impressions ~ Engagement_Score + Profile.Visits, data=data)
+summary(model_no_comments)
+```
+- The R-squared has reduced by 1% when comments has been removed as a predictor variable; meaning it has some sort of influence in predicting 'Impressions'. This means i will keep Comment as a predictor
+
+### RESIDUAL DIAGNOSTICS
+```{r}
+par(mfrow=c(2,2))
+plot(model)
+```
+
+### STEP 4:DATA CLEANING (OUTLIERS)
+There are 3 outliers consistently appearing in the residuals vs. fitted plot, Q-Q plot, scale-location plot, and residuals vs. leverage plot.
+
+#### Identifying Outliers
+```{r}
+outlier_test <- which(abs(rstandard(model)) > 2)
+print(outlier_test)
+data[outlier_test,] 
+```
+#### Using Cook's distance to identify Oulier Impact
+```{r}
+cooks_d <- cooks.distance(model)
+influential_points <- which(cooks_d > (4 / nrow(data))) #influential points
+print(influential_points)
+```
+
+All outliers except 106 are influential points. I am going to transform the variables 
+
+### VARIABLE TRANSFORMATION
+```{r}
+data$log_Impressions <- log(data$Impressions)
+log_model <- lm(log_Impressions ~ Engagement_Score + Comments + Profile.Visits, data = data)
+summary(log_model)
+```
+- I may have to take out Comments as a predictor in this transformed model because the p value = 0.572 meaning it is not significant
+
+
+#### EXCLUDING Comments variable
+```{r}
+clean_model_no_comments <- lm(log_Impressions ~ Engagement_Score + Profile.Visits, data = data)
+
+summary(clean_model_no_comments)
+```
+
+
+
+## Diagnostic Plots To Test If Better Without 'Comment' 
+```{r}
+par(mfrow = c(2,2))
+plot(clean_model_no_comments)
+```
+- The plots look better than the diagnostic plots that included comments
+
+## STEP 5: INTERACTION AND HYPOTHESIS TESTING
+Null Hypothesis ($H_0$): There is no interaction effect between Engagement_Score and Profile.Visits.
+$\beta_3 = 0$
+Alternative Hypothesis ($H_A$): There is an interaction effect between Engagement_Score and Profile.Visits.
+$\beta_3 \neq 0$
+```{r}
+data$Interaction <- data$Engagement_Score * data$Profile.Visits
+
+interaction_model <- lm(log_Impressions ~ Engagement_Score * Profile.Visits, data = data)
+
+summary(interaction_model)
+```
+- The interaction term 'Engagement_Score:Profile.Visits' has a p_value of $0.000103$ which is less than $\alpha = 0.05$. We conclude that there is a statistically significant interaction between Engagement_Score and Profile.Visits, this means that the relationship between Engagement_Score and log_Impressions changes with different levels of Profile.Visits.
+
+
+## STEP 6: DIAGNOSTICS AND ASSUMPTIONS
+```{r}
+
+par(mfrow = c(2,2))
+plot(clean_model_no_comments)
+
+residuals <- resid(clean_model_no_comments)
+hist(residuals, main = "Residuals Plot", xlab = "Residuals")
+```
+# MODEL PERFORMANCE
+```{r}
+summary(clean_model_no_comments)$adj.r.squared
+```
+An Adjusted R_square value of 0.7751 indicates that approximately 77.5% of the variance in Impression variable is explained by the predictors. 
+
+```{r}
+
+data$Saves_scaled <- as.numeric(scale(data$Saves))
+data$Likes_scaled <- as.numeric(scale(data$Likes))
+data$Shares_scaled <- as.numeric(scale(data$Shares))
+
+data$Engagement_Score <- data$Saves_scaled + data$Likes_scaled + data$Shares_scaled
+```
+
+# REFITTING MODEL
+```{r}
+clean_model_no_comments <- lm(Impressions ~ Engagement_Score + Profile.Visits, data = data)
+
+```
+
+# STEP 7: CONFIDENCE INTERVAL AND PREDICTION
+```{r}
+
+
+new_data <- data.frame(Saves = 30, Likes = 200, Shares = 15, Profile.Visits = 25)
+
+# Normalize the new data 
+new_data$Saves_scaled <- (new_data$Saves - mean(data$Saves)) / sd(data$Saves)
+new_data$Likes_scaled <-(new_data$Likes - mean(data$Likes)) / sd(data$Likes)
+new_data$Shares_scaled <- (new_data$Shares - mean(data$Shares)) / sd(data$Shares)
+
+
+new_data$Engagement_Score <- as.numeric(new_data$Saves_scaled + new_data$Likes_scaled + new_data$Shares_scaled)
+
+confint(clean_model_no_comments)
+predict(clean_model_no_comments, newdata = new_data, interval = "confidence")
+
+```
+
+
+```{r}
+names(data) <- make.unique(names(data))
+names(data)
+
+```
+# STEP 8: VISUALIZATION OF MODEL RESULTS
+```{r}
+data$Profile.Visits <- as.numeric(as.character(data$Profile.Visits))
+data$Profile.Visits_Group <- cut(data$Profile.Visits, breaks = c(4, 8, 12, 20, Inf),
+                                 labels = c("Low", "Medium", "High", "Very High"))
+
+```
+
+```{r}
+library(ggplot2)
+ggplot(data, aes(x = Profile.Visits_Group, y = Impressions, fill = Profile.Visits_Group)) +
+  geom_boxplot() +
+  labs(
+    title = "Distribution of Impressions by Profile Visits Group",
+    x = "Profile Visits Group",
+    y = "Impressions"
+  )
+
+
+
+```
+
+# MODEL PERFORMANCE
+Adjusted R²:0.7751 (77.51% variance explained).
+F-statistic: Significant (p < 2.2e-16), confirming the model's predictive power.
+
+# LIMITATIONS AND CONSIDERATIONS
+## LIMITATIONS
+1. Data Scope: The analysis is limited to historical data from a single source, potentially reducing generalizability.
+2. Comments Anomaly: Requires further investigation to understand its unexpected effect.
+3. Feature Limitations: Excludes visual and contextual factors like post aesthetics or timing.
+
+## FUTURE WORK
+1. Include temporal features (e.g., time of posting).
+2. Experiment with nonlinear models or machine learning algorithms (e.g., Random Forests) for potential performance gains.
+3. Analyze post captions and hashtags using text analytics for deeper insights.
+
+# CONCLUSION
+This analysis investigates key factors influencing Instagram post impressions using historical reach data. By leveraging predictive modeling, significant drivers of impressions were identified, including user engagement metrics (likes, shares, saves) and profile visits. The model explains 77.51% of the variation in impressions, offering actionable insights for optimizing content strategies. Recommendations include focusing on boosting engagement metrics and refining caption and hashtag strategies to amplify reach.
+
